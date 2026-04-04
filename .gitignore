@@ -1,0 +1,24 @@
+# Local Claude context
+CLAUDE.md
+
+# Generated for Linux cross-compilation
+include/Windows.h
+include/AssertionNoops.h
+
+# Temporary files
+tmp/
+
+# Build output
+bin/
+obj/
+build/
+
+# Visual Studio
+.vs/
+*.user
+*.db
+x64/
+
+# OS
+Thumbs.db
+.DS_Store

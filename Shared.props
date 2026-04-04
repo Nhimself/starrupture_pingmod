@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <SDK_SOURCE_DIR Condition="'$(Configuration)' == 'Debug' Or '$(Configuration)' == 'Release'">$(MSBuildThisFileDirectory)StarRupture SDK\Client\SDK</SDK_SOURCE_DIR>
+    <SDK_SOURCE_DIR Condition="'$(Configuration)' == 'Client Debug' Or '$(Configuration)' == 'Client Release'">$(MSBuildThisFileDirectory)StarRupture SDK\Client\SDK</SDK_SOURCE_DIR>
+    <SDK_SOURCE_DIR Condition="'$(Configuration)' == 'Server Debug' Or '$(Configuration)' == 'Server Release'">$(MSBuildThisFileDirectory)StarRupture SDK\Server\SDK</SDK_SOURCE_DIR>
+
+    <SDK_INCLUDE_DIR Condition="'$(Configuration)' == 'Debug' Or '$(Configuration)' == 'Release'">$(MSBuildThisFileDirectory)StarRupture SDK\Client</SDK_INCLUDE_DIR>
+    <SDK_INCLUDE_DIR Condition="'$(Configuration)' == 'Client Debug' Or '$(Configuration)' == 'Client Release'">$(MSBuildThisFileDirectory)StarRupture SDK\Client</SDK_INCLUDE_DIR>
+    <SDK_INCLUDE_DIR Condition="'$(Configuration)' == 'Server Debug' Or '$(Configuration)' == 'Server Release'">$(MSBuildThisFileDirectory)StarRupture SDK\Server</SDK_INCLUDE_DIR>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions Condition="'$(Configuration)' == 'Client Debug' Or '$(Configuration)' == 'Client Release'">MODLOADER_CLIENT_BUILD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)' == 'Server Debug' Or '$(Configuration)' == 'Server Release'">MODLOADER_SERVER_BUILD;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(MODLOADER_BUILD_TAG)' != ''">MODLOADER_BUILD_TAG=$(MODLOADER_BUILD_TAG);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>
