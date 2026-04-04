@@ -22,23 +22,29 @@ jobs:
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v3
 
+      - name: Generate build tag
+        id: tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          echo "BUILD_TAG=$tag" >> $env:GITHUB_OUTPUT
+
       - name: Build Client Release
         run: |
-          $VERSION = "${{ github.ref }}".Replace("refs/tags/v", "")
           msbuild "StarRupture-PingMod.sln" `
             /p:Configuration="Client Release" `
             /p:Platform=x64 `
-            /p:MODLOADER_BUILD_TAG="release-$VERSION" `
+            /p:ModLoaderBuildTag="${{ steps.tag.outputs.BUILD_TAG }}" `
             /m `
             /v:minimal
 
-      - name: Stage release artifact
+      - name: Stage release artifacts
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release
           Copy-Item "bin\x64\Client Release\plugins\PingMod.dll" -Destination "release\PingMod.dll"
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "PingMod ${{ github.ref_name }}"
