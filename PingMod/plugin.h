@@ -4,7 +4,7 @@
 
 extern "C"
 {
-	__declspec(dllexport) SPluginInfo* __cdecl GetPluginInfo();
-	__declspec(dllexport) void __cdecl PluginInit(IPluginHooks* Hooks);
-	__declspec(dllexport) void __cdecl PluginShutdown();
+	__declspec(dllexport) PluginInfo* GetPluginInfo();
+	__declspec(dllexport) bool PluginInit(IPluginLogger* logger, IPluginConfig* config, IPluginScanner* scanner, IPluginHooks* hooks);
+	__declspec(dllexport) void PluginShutdown();
 }
