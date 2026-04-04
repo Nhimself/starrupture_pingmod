@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Client Debug|x64">
+      <Configuration>Client Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Client Release|x64">
+      <Configuration>Client Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Server Debug|x64">
+      <Configuration>Server Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Server Release|x64">
+      <Configuration>Server Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Configuration">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <ProjectGuid>{B2C3D4E5-F6A7-8901-BCDE-F12345678901}</ProjectGuid>
+    <RootNamespace>PingMod</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <PropertyGroup>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization Condition="'$(Configuration)' == 'Client Release' Or '$(Configuration)' == 'Release' Or '$(Configuration)' == 'Server Release'">true</WholeProgramOptimization>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\Shared.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\plugins\</OutDir>
+    <IntDir>$(SolutionDir)obj\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>PingMod</TargetName>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalIncludeDirectories>$(SDK_INCLUDE_DIR);$(SDK_SOURCE_DIR);$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Optimization Condition="'$(Configuration)' == 'Client Release' Or '$(Configuration)' == 'Release' Or '$(Configuration)' == 'Server Release'">MaxSpeed</Optimization>
+      <InlineFunctionExpansion Condition="'$(Configuration)' == 'Client Release' Or '$(Configuration)' == 'Release' Or '$(Configuration)' == 'Server Release'">AnySuitable</InlineFunctionExpansion>
+      <EnableFunctionLevelLinking Condition="'$(Configuration)' == 'Client Release' Or '$(Configuration)' == 'Release' Or '$(Configuration)' == 'Server Release'">true</EnableFunctionLevelLinking>
+      <IntrinsicFunctions Condition="'$(Configuration)' == 'Client Release' Or '$(Configuration)' == 'Release' Or '$(Configuration)' == 'Server Release'">true</IntrinsicFunctions>
+    </ClCompile>
+    <Link>
+      <OutputFile>$(OutDir)$(TargetName).dll</OutputFile>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <ClInclude Include="plugin.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\StarRupture SDK\Client\SDK\Basic.cpp" />
+    <ClCompile Include="..\StarRupture SDK\Client\SDK\CoreUObject_functions.cpp" />
+    <ClCompile Include="..\StarRupture SDK\Client\SDK\Engine_functions.cpp" />
+    <ClCompile Include="..\StarRupture SDK\Client\SDK\Chimera_functions.cpp" />
+    <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="plugin.cpp" />
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
