@@ -33,13 +33,15 @@ jobs:
             /v:minimal
 
       - name: Stage release artifact
+        shell: pwsh
         run: |
-          mkdir -p release
-          Copy-Item -Path "bin/x64/Client Release/plugins/PingMod.dll" -Destination "release/PingMod.dll"
+          New-Item -ItemType Directory -Force -Path release
+          Copy-Item "bin\x64\Client Release\plugins\PingMod.dll" -Destination "release\PingMod.dll"
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: "PingMod ${{ github.ref_name }}"
           generate_release_notes: true
-          files: release/PingMod.dll
+          files: |
+            release/PingMod.dll
