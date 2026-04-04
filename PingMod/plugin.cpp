@@ -4,84 +4,129 @@
 #include "Basic.hpp"
 
 static IPluginLogger* g_logger  = nullptr;
+static IPluginConfig* g_config  = nullptr;
 static IPluginHooks*  g_hooks   = nullptr;
 
 // UCrPlayerPingDeveloperSettings memory layout (from game SDK dump):
 //   0x0038  float  DisappearTime
-//   0x003C  float  TraceLength    <-- the 100m distance limit
+//   0x003C  float  TraceLength    <-- the distance limit (default ~100 m = 10,000 cm)
 //
-// Unreal Engine uses centimetres; 100 metres = 10,000 cm.
-// We raise it to 1,000,000 cm (10 km) — effectively unlimited for normal play.
-static constexpr float UNLIMITED_TRACE_LENGTH = 1'000'000.0f;
+// Unreal Engine uses centimetres internally.
+
+// Config defaults
+static constexpr float DEFAULT_MAX_PING_DISTANCE_M = 500.0f; // metres
+static constexpr float MIN_PING_DISTANCE_M         = 50.0f;
+static constexpr float MAX_PING_DISTANCE_M         = 2000.0f; // above this risks hitting skybox/backdrop
+
+static constexpr ConfigEntry CONFIG_ENTRIES[] =
+{
+    {
+        /* section      */ "General",
+        /* key          */ "MaxPingDistanceM",
+        /* type         */ ConfigValueType::Float,
+        /* defaultValue */ "500.0",
+        /* description  */ "Maximum ping distance in metres (default: 500).\n"
+                           "The original game limit is 100 m.\n"
+                           "Values above ~2000 m risk hitting out-of-bounds geometry\n"
+                           "(skybox / backdrop) and may cause server crashes.",
+        /* rangeMin     */ MIN_PING_DISTANCE_M,
+        /* rangeMax     */ MAX_PING_DISTANCE_M
+    }
+};
+
+static constexpr ConfigSchema CONFIG_SCHEMA =
+{
+    CONFIG_ENTRIES,
+    1
+};
+
+static float ReadConfiguredTraceLength()
+{
+    float metres = g_config->ReadFloat("PingMod", "General", "MaxPingDistanceM",
+                                       DEFAULT_MAX_PING_DISTANCE_M);
+
+    // Clamp to safe range so a bad config value can't cause crashes
+    if (metres < MIN_PING_DISTANCE_M) metres = MIN_PING_DISTANCE_M;
+    if (metres > MAX_PING_DISTANCE_M) metres = MAX_PING_DISTANCE_M;
+
+    return metres * 100.0f; // metres -> centimetres (Unreal units)
+}
 
 static void ApplyPingDistancePatch()
 {
-	using namespace SDK;
+    using namespace SDK;
 
-	UClass* pingSettingsClass = BasicFilesImplUtils::FindClassByName("CrPlayerPingDeveloperSettings");
-	if (!pingSettingsClass)
-	{
-		if (g_logger) g_logger->Warn("PingMod", "CrPlayerPingDeveloperSettings class not found");
-		return;
-	}
+    UClass* pingSettingsClass = BasicFilesImplUtils::FindClassByName("CrPlayerPingDeveloperSettings");
+    if (!pingSettingsClass)
+    {
+        if (g_logger) g_logger->Warn("PingMod", "CrPlayerPingDeveloperSettings class not found");
+        return;
+    }
 
-	UObject* cdo = BasicFilesImplUtils::GetDefaultObjectImpl(pingSettingsClass);
-	if (!cdo)
-	{
-		if (g_logger) g_logger->Warn("PingMod", "CrPlayerPingDeveloperSettings CDO not found");
-		return;
-	}
+    UObject* cdo = BasicFilesImplUtils::GetDefaultObjectImpl(pingSettingsClass);
+    if (!cdo)
+    {
+        if (g_logger) g_logger->Warn("PingMod", "CrPlayerPingDeveloperSettings CDO not found");
+        return;
+    }
 
-	// TraceLength is at offset 0x003C in the object
-	float* traceLength = reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(cdo) + 0x003C);
-	float original = *traceLength;
-	*traceLength = UNLIMITED_TRACE_LENGTH;
+    // TraceLength is at offset 0x003C in the object
+    float* traceLength = reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(cdo) + 0x003C);
+    float original     = *traceLength;
+    float target       = ReadConfiguredTraceLength();
+    *traceLength       = target;
 
-	if (g_logger)
-		g_logger->Info("PingMod", "TraceLength patched: %.0f cm (%.0f m) -> %.0f cm (%.0f m)",
-			original, original / 100.0f,
-			UNLIMITED_TRACE_LENGTH, UNLIMITED_TRACE_LENGTH / 100.0f);
+    if (g_logger)
+        g_logger->Info("PingMod", "TraceLength patched: %.0f cm (%.0f m) -> %.0f cm (%.0f m)",
+            original, original / 100.0f,
+            target,   target   / 100.0f);
 }
 
 static void OnAnyWorldBeginPlay(SDK::UWorld* /*world*/, const char* /*worldName*/)
 {
-	// Re-apply on every world load to handle map transitions
-	ApplyPingDistancePatch();
+    // Re-apply on every world load to handle map transitions
+    ApplyPingDistancePatch();
 }
 
 static PluginInfo s_plugin_info = {
-	"PingMod",
-	"1.0.0",
-	"Nhimself",
-	"Removes the 100-meter distance limit on pings, allowing players to set pings at any range.",
-	PLUGIN_INTERFACE_VERSION
+    "PingMod",
+    "1.0.0",
+    "Nhimself",
+    "Raises the ping distance limit beyond the default 100 m. "
+    "Configurable via MaxPingDistanceM in the mod config (default: 500 m, max: 2000 m).",
+    PLUGIN_INTERFACE_VERSION
 };
 
 PluginInfo* GetPluginInfo()
 {
-	return &s_plugin_info;
+    return &s_plugin_info;
 }
 
-bool PluginInit(IPluginLogger* logger, IPluginConfig* /*config*/, IPluginScanner* /*scanner*/, IPluginHooks* hooks)
+bool PluginInit(IPluginLogger* logger, IPluginConfig* config, IPluginScanner* /*scanner*/, IPluginHooks* hooks)
 {
-	g_logger = logger;
-	g_hooks  = hooks;
+    g_logger = logger;
+    g_config = config;
+    g_hooks  = hooks;
 
-	// Apply immediately — CDO is available as soon as the engine starts
-	ApplyPingDistancePatch();
+    config->InitializeFromSchema("PingMod", &CONFIG_SCHEMA);
 
-	// Re-apply on each world load to survive map transitions
-	hooks->World->RegisterOnAnyWorldBeginPlay(OnAnyWorldBeginPlay);
+    // Apply immediately — CDO is available as soon as the engine starts
+    ApplyPingDistancePatch();
 
-	logger->Info("PingMod", "Initialized — ping distance limit removed");
-	return true;
+    // Re-apply on each world load to survive map transitions
+    hooks->World->RegisterOnAnyWorldBeginPlay(OnAnyWorldBeginPlay);
+
+    logger->Info("PingMod", "Initialized (MaxPingDistanceM = %.0f)",
+        ReadConfiguredTraceLength() / 100.0f);
+    return true;
 }
 
 void PluginShutdown()
 {
-	if (g_hooks)
-		g_hooks->World->UnregisterOnAnyWorldBeginPlay(OnAnyWorldBeginPlay);
+    if (g_hooks)
+        g_hooks->World->UnregisterOnAnyWorldBeginPlay(OnAnyWorldBeginPlay);
 
-	g_logger = nullptr;
-	g_hooks  = nullptr;
+    g_logger = nullptr;
+    g_config = nullptr;
+    g_hooks  = nullptr;
 }
