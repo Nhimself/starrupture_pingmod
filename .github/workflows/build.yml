@@ -2,7 +2,8 @@ name: Build PingMod
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - 'dev/*'
     paths-ignore:
       - '**/*.md'
 
