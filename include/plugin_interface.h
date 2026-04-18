@@ -70,8 +70,26 @@
 //      Patterns for AHUD_PostRender, StaticLoadObject, and GatherPlayersData moved from
 //      compass_patterns.h into the modloader's scan_patterns.h and owned by the modloader.
 //      hooks->HUD and hooks->UI and hooks->Input are all nullptr on server — always null-check.
-#define PLUGIN_INTERFACE_VERSION_MIN 14  // oldest plugin ABI still accepted by this loader
-#define PLUGIN_INTERFACE_VERSION_MAX 16  // current interface version (this header)
+// v17: Added IPluginNetworkChannel sub-interface and Network pointer in IPluginHooks.
+//      Enables server<->client plugin packet exchange via a namespaced channel per plugin.
+//        Network  — send/receive typed packets              (hooks->Network->SendPacketToClient)
+// v18: Extended IPluginNetworkChannel with client->server direction: SendPacketToServer,
+//      RegisterServerMessageHandler, UnregisterServerMessageHandler.
+//      Added ExcludeFromBroadcast / UnexcludeFromBroadcast for selective broadcasts.
+// v19: Introduced IPluginSelf. PluginInit now receives a single IPluginSelf* instead of four
+//      separate interface pointers. MIN bumped to 19 (ABI break).
+//        IPluginSelf — identity + all subsystem pointers (name, version, logger, config, scanner, hooks)
+// v20: Added OnBeforeWorldEndPlay / OnAfterWorldEndPlay to IPluginWorldEvents. MIN remains 19.
+//        World    — world-end-play notifications          (hooks->World->RegisterOnBeforeWorldEndPlay)
+// v21: Added IPluginNativePointers sub-interface and NativePointers pointer in IPluginHooks.
+//      Provides resolved addresses for every hooked engine function (useful for manual trampolines).
+//        NativePointers — raw addresses for hooked functions (hooks->NativePointers->WorldBeginPlay())
+// v22: Added IPluginHttpServer sub-interface and HttpServer pointer in IPluginHooks.
+//      Plugins can serve static files or handle raw HTTP requests via the modloader's built-in server.
+//      HttpServer is non-null on server builds only; always nullptr on client/generic builds.
+//        HttpServer — static file + raw route registration (hooks->HttpServer->AddRoute)
+#define PLUGIN_INTERFACE_VERSION_MIN 19  // oldest plugin ABI still accepted by this loader
+#define PLUGIN_INTERFACE_VERSION_MAX 22  // current interface version (this header)
 #define PLUGIN_INTERFACE_VERSION PLUGIN_INTERFACE_VERSION_MAX  // alias used by plugins in PluginInfo
 
 // Log levels
@@ -203,6 +221,13 @@ typedef void (*PluginActorBeginPlayCallback)(void* actor);
 typedef void (*PluginPlayerJoinedCallback)(void* playerController);
 typedef void (*PluginPlayerLeftCallback)(void* exitingController);
 typedef void (*PluginHUDPostRenderCallback)(void* hud);
+typedef void (*PluginWorldEndPlayCallback)(SDK::UWorld* world, const char* worldName);
+typedef void (*PluginNetworkMessageCallback)(const char* pluginName, const char* typeTag,
+                                             const uint8_t* data, size_t size);
+typedef void (*PluginNetworkServerMessageCallback)(void* senderPlayerController,
+                                                   const char* pluginName,
+                                                   const char* typeTag,
+                                                   const uint8_t* data, size_t size);
 
 // ============================================================
 // Spawner hook callback typedefs (v14)
@@ -264,6 +289,10 @@ struct IPluginWorldEvents
     void (*UnregisterOnSaveLoaded)(PluginSaveLoadedCallback);
     void (*RegisterOnExperienceLoadComplete)(PluginExperienceLoadCompleteCallback);
     void (*UnregisterOnExperienceLoadComplete)(PluginExperienceLoadCompleteCallback);
+    void (*RegisterOnBeforeWorldEndPlay)(PluginWorldEndPlayCallback);    // v20
+    void (*UnregisterOnBeforeWorldEndPlay)(PluginWorldEndPlayCallback);  // v20
+    void (*RegisterOnAfterWorldEndPlay)(PluginWorldEndPlayCallback);     // v20
+    void (*UnregisterOnAfterWorldEndPlay)(PluginWorldEndPlayCallback);   // v20
 };
 
 // ============================================================
@@ -303,6 +332,30 @@ struct IPluginSpawnerHooks
     void (*UnregisterOnBeforeDoSpawning)(PluginBeforeDoSpawningCallback callback);
     void (*RegisterOnAfterDoSpawning)(PluginAfterDoSpawningCallback callback);
     void (*UnregisterOnAfterDoSpawning)(PluginAfterDoSpawningCallback callback);
+};
+
+// ============================================================
+// IPluginNetworkChannel (v17)
+// ============================================================
+struct IPluginNetworkChannel
+{
+    bool (*IsServer)();
+    void (*SendPacketToClient)(void* playerController, const struct IPluginSelf* self,
+                               const char* typeTag, const uint8_t* data, size_t size);
+    void (*SendPacketToAllClients)(const struct IPluginSelf* self, const char* typeTag,
+                                   const uint8_t* data, size_t size);
+    void (*RegisterMessageHandler)(const struct IPluginSelf* self, const char* typeTag,
+                                   PluginNetworkMessageCallback callback);
+    void (*UnregisterMessageHandler)(const struct IPluginSelf* self, const char* typeTag,
+                                     PluginNetworkMessageCallback callback);
+    void (*SendPacketToServer)(const struct IPluginSelf* self, const char* typeTag,
+                               const uint8_t* data, size_t size);                          // v18
+    void (*RegisterServerMessageHandler)(const struct IPluginSelf* self, const char* typeTag,
+                                         PluginNetworkServerMessageCallback callback);     // v18
+    void (*UnregisterServerMessageHandler)(const struct IPluginSelf* self, const char* typeTag,
+                                           PluginNetworkServerMessageCallback callback);   // v18
+    void (*ExcludeFromBroadcast)(void* playerController);    // v18
+    void (*UnexcludeFromBroadcast)(void* playerController);  // v18
 };
 
 // ============================================================
@@ -434,20 +487,92 @@ struct IPluginHUDEvents
 };
 
 // ============================================================
+// IPluginNativePointers (v21)
+// ============================================================
+struct IPluginNativePointers
+{
+    uintptr_t (*EngineLoopInit)();
+    uintptr_t (*GameEngineInit)();
+    uintptr_t (*EngineLoopExit)();
+    uintptr_t (*EnginePreExit)();
+    uintptr_t (*EngineTick)();
+    uintptr_t (*WorldBeginPlay)();
+    uintptr_t (*WorldEndPlay)();
+    uintptr_t (*SaveLoaded)();
+    uintptr_t (*ExperienceLoadComplete)();
+    uintptr_t (*ActorBeginPlay)();
+    uintptr_t (*PlayerJoined)();
+    uintptr_t (*PlayerLeft)();
+    uintptr_t (*SpawnerActivate)();
+    uintptr_t (*SpawnerDeactivate)();
+    uintptr_t (*SpawnerDoSpawning)();
+    uintptr_t (*HUDPostRender)();       // client only (nullptr on server/generic)
+    uintptr_t (*ClientMessageExec)();   // client only (nullptr on server/generic)
+};
+
+// ============================================================
+// IPluginHttpServer (v22) — server builds only
+// ============================================================
+enum class HttpMethod : uint32_t
+{
+    Get, Post, Put, Delete, Patch, Options, Head, Other
+};
+
+enum class HttpRequestAction : uint32_t
+{
+    Approve,
+    Deny
+};
+
+struct PluginHttpRequest
+{
+    const char* url;
+    const uint8_t* body;
+    size_t bodyLen;
+    HttpMethod method;
+};
+
+struct PluginHttpResponse
+{
+    int statusCode;
+    const char* contentType;
+    const uint8_t* body;
+    size_t bodyLen;
+};
+
+typedef HttpRequestAction (*PluginHttpRequestFilterCallback)(const PluginHttpRequest* req);
+typedef void              (*PluginHttpRouteCallback)(const PluginHttpRequest* req,
+                                                     PluginHttpResponse* resp);
+
+struct IPluginHttpServer
+{
+    bool (*AddRoute)(const struct IPluginSelf* self, const char* folderName);
+    void (*RemoveRoute)(const struct IPluginSelf* self, const char* folderName);
+    void (*RegisterOnRawRequest)(PluginHttpRequestFilterCallback callback);
+    void (*UnregisterOnRawRequest)(PluginHttpRequestFilterCallback callback);
+    bool (*AddRawRoute)(const struct IPluginSelf* self, const char* urlPrefix,
+                        PluginHttpRouteCallback callback);
+    void (*RemoveRawRoute)(const struct IPluginSelf* self, const char* urlPrefix);
+};
+
+// ============================================================
 // IPluginHooks — top-level hook interface (v14+)
 // ============================================================
 struct IPluginHooks
 {
-    IPluginSpawnerHooks* Spawner;   // v14
-    IPluginHookUtils*    Hooks;     // v14
-    IPluginMemoryUtils*  Memory;    // v14
-    IPluginEngineEvents* Engine;    // v14
-    IPluginWorldEvents*  World;     // v14
-    IPluginPlayerEvents* Players;   // v14
-    IPluginActorEvents*  Actors;    // v14
-    IPluginInputEvents*  Input;     // v15 (client only, nullptr on server)
-    IPluginUIEvents*     UI;        // v15 (client only, nullptr on server)
-    IPluginHUDEvents*    HUD;       // v16 (client only, nullptr on server)
+    IPluginSpawnerHooks*    Spawner;         // v14
+    IPluginHookUtils*       Hooks;           // v14
+    IPluginMemoryUtils*     Memory;          // v14
+    IPluginEngineEvents*    Engine;          // v14
+    IPluginWorldEvents*     World;           // v14
+    IPluginPlayerEvents*    Players;         // v14
+    IPluginActorEvents*     Actors;          // v14
+    IPluginInputEvents*     Input;           // v15 (client only, nullptr on server)
+    IPluginUIEvents*        UI;              // v15 (client only, nullptr on server)
+    IPluginHUDEvents*       HUD;             // v16 (client only, nullptr on server)
+    IPluginNetworkChannel*  Network;         // v17
+    IPluginNativePointers*  NativePointers;  // v21
+    IPluginHttpServer*      HttpServer;      // v22 (server only, nullptr on client/generic)
 };
 
 // Plugin metadata structure
@@ -460,9 +585,23 @@ struct PluginInfo
     int interfaceVersion;
 };
 
+// ============================================================
+// IPluginSelf (v19) — plugin identity + subsystem access
+// Passed as the sole argument to PluginInit.
+// ============================================================
+struct IPluginSelf
+{
+    const char*     name;
+    const char*     version;
+    IPluginLogger*  logger;
+    IPluginConfig*  config;
+    IPluginScanner* scanner;
+    IPluginHooks*   hooks;
+};
+
 // Function pointer types for the plugin loader
 typedef PluginInfo* (*GetPluginInfoFunc)();
-typedef bool (*PluginInitFunc)(IPluginLogger* logger, IPluginConfig* config, IPluginScanner* scanner, IPluginHooks* hooks);
+typedef bool (*PluginInitFunc)(IPluginSelf* self);
 typedef void (*PluginShutdownFunc)();
 
 #define PLUGIN_GET_INFO_FUNC_NAME "GetPluginInfo"
