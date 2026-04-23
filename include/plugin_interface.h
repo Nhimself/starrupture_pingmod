@@ -70,26 +70,8 @@
 //      Patterns for AHUD_PostRender, StaticLoadObject, and GatherPlayersData moved from
 //      compass_patterns.h into the modloader's scan_patterns.h and owned by the modloader.
 //      hooks->HUD and hooks->UI and hooks->Input are all nullptr on server — always null-check.
-// v17: Added IPluginNetworkChannel sub-interface and Network pointer in IPluginHooks.
-//      Enables server<->client plugin packet exchange via a namespaced channel per plugin.
-//        Network  — send/receive typed packets              (hooks->Network->SendPacketToClient)
-// v18: Extended IPluginNetworkChannel with client->server direction: SendPacketToServer,
-//      RegisterServerMessageHandler, UnregisterServerMessageHandler.
-//      Added ExcludeFromBroadcast / UnexcludeFromBroadcast for selective broadcasts.
-// v19: Introduced IPluginSelf. PluginInit now receives a single IPluginSelf* instead of four
-//      separate interface pointers. MIN bumped to 19 (ABI break).
-//        IPluginSelf — identity + all subsystem pointers (name, version, logger, config, scanner, hooks)
-// v20: Added OnBeforeWorldEndPlay / OnAfterWorldEndPlay to IPluginWorldEvents. MIN remains 19.
-//        World    — world-end-play notifications          (hooks->World->RegisterOnBeforeWorldEndPlay)
-// v21: Added IPluginNativePointers sub-interface and NativePointers pointer in IPluginHooks.
-//      Provides resolved addresses for every hooked engine function (useful for manual trampolines).
-//        NativePointers — raw addresses for hooked functions (hooks->NativePointers->WorldBeginPlay())
-// v22: Added IPluginHttpServer sub-interface and HttpServer pointer in IPluginHooks.
-//      Plugins can serve static files or handle raw HTTP requests via the modloader's built-in server.
-//      HttpServer is non-null on server builds only; always nullptr on client/generic builds.
-//        HttpServer — static file + raw route registration (hooks->HttpServer->AddRoute)
-#define PLUGIN_INTERFACE_VERSION_MIN 19  // oldest plugin ABI still accepted by this loader
-#define PLUGIN_INTERFACE_VERSION_MAX 22  // current interface version (this header)
+#define PLUGIN_INTERFACE_VERSION_MIN 22  // oldest plugin ABI still accepted by this loader
+#define PLUGIN_INTERFACE_VERSION_MAX 23  // current interface version (this header)
 #define PLUGIN_INTERFACE_VERSION PLUGIN_INTERFACE_VERSION_MAX  // alias used by plugins in PluginInfo
 
 // Log levels
