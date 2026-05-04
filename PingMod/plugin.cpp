@@ -3,6 +3,7 @@
 // Game SDK - only Basic.hpp needed: provides FindClassByName / GetDefaultObjectImpl
 #include "Basic.hpp"
 
+static IPluginSelf*   g_self    = nullptr;
 static IPluginLogger* g_logger  = nullptr;
 static IPluginConfig* g_config  = nullptr;
 static IPluginHooks*  g_hooks   = nullptr;
@@ -51,7 +52,7 @@ static constexpr ConfigSchema CONFIG_SCHEMA =
 
 static float ReadConfiguredTraceLength()
 {
-    float metres = g_config->ReadFloat("PingMod", "General", "MaxPingDistanceM",
+    float metres = g_config->ReadFloat(g_self, "General", "MaxPingDistanceM",
                                        DEFAULT_MAX_PING_DISTANCE_M);
 
     // Clamp to safe range so a bad config value can't cause crashes
@@ -63,14 +64,14 @@ static float ReadConfiguredTraceLength()
 
 static bool IsEnabled()
 {
-    return g_config->ReadBool("PingMod", "General", "Enabled", true);
+    return g_config->ReadBool(g_self, "General", "Enabled", true);
 }
 
 static void ApplyPingDistancePatch()
 {
     if (!IsEnabled())
     {
-        if (g_logger) g_logger->Info("PingMod", "Disabled via config — skipping patch");
+        if (g_logger) g_logger->Info(g_self, "Disabled via config — skipping patch");
         return;
     }
 
@@ -79,14 +80,14 @@ static void ApplyPingDistancePatch()
     UClass* pingSettingsClass = BasicFilesImplUtils::FindClassByName("CrPlayerPingDeveloperSettings");
     if (!pingSettingsClass)
     {
-        if (g_logger) g_logger->Warn("PingMod", "CrPlayerPingDeveloperSettings class not found");
+        if (g_logger) g_logger->Warn(g_self, "CrPlayerPingDeveloperSettings class not found");
         return;
     }
 
     UObject* cdo = BasicFilesImplUtils::GetDefaultObjectImpl(pingSettingsClass);
     if (!cdo)
     {
-        if (g_logger) g_logger->Warn("PingMod", "CrPlayerPingDeveloperSettings CDO not found");
+        if (g_logger) g_logger->Warn(g_self, "CrPlayerPingDeveloperSettings CDO not found");
         return;
     }
 
@@ -97,7 +98,7 @@ static void ApplyPingDistancePatch()
     *traceLength       = target;
 
     if (g_logger)
-        g_logger->Info("PingMod", "TraceLength patched: %.0f cm (%.0f m) -> %.0f cm (%.0f m)",
+        g_logger->Info(g_self, "TraceLength patched: %.0f cm (%.0f m) -> %.0f cm (%.0f m)",
             original, original / 100.0f,
             target,   target   / 100.0f);
 }
@@ -124,11 +125,12 @@ PluginInfo* GetPluginInfo()
 
 bool PluginInit(IPluginSelf* self)
 {
+    g_self   = self;
     g_logger = self->logger;
     g_config = self->config;
     g_hooks  = self->hooks;
 
-    self->config->InitializeFromSchema("PingMod", &CONFIG_SCHEMA);
+    self->config->InitializeFromSchema(self, &CONFIG_SCHEMA);
 
     // Apply immediately — CDO is available as soon as the engine starts
     ApplyPingDistancePatch();
@@ -136,7 +138,7 @@ bool PluginInit(IPluginSelf* self)
     // Re-apply on each world load to survive map transitions
     self->hooks->World->RegisterOnAnyWorldBeginPlay(OnAnyWorldBeginPlay);
 
-    self->logger->Info("PingMod", "Initialized (Enabled=%s, MaxPingDistanceM=%.0f)",
+    self->logger->Info(self, "Initialized (Enabled=%s, MaxPingDistanceM=%.0f)",
         IsEnabled() ? "true" : "false",
         ReadConfiguredTraceLength() / 100.0f);
     return true;
@@ -147,6 +149,7 @@ void PluginShutdown()
     if (g_hooks)
         g_hooks->World->UnregisterOnAnyWorldBeginPlay(OnAnyWorldBeginPlay);
 
+    g_self   = nullptr;
     g_logger = nullptr;
     g_config = nullptr;
     g_hooks  = nullptr;
