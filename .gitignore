@@ -1,10 +1,6 @@
 # Local Claude context
 CLAUDE.md
 
-# Generated for Linux cross-compilation
-include/Windows.h
-include/AssertionNoops.h
-
 # Temporary files
 tmp/
 

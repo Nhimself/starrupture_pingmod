@@ -22,12 +22,31 @@
 //      SetWindowFontScale, GetContentRegionAvail, GetDisplaySize).
 //      Added PluginWindowHints struct and windowHints field to PluginWidgetDesc.
 //      MIN remains 23.
-#define PLUGIN_INTERFACE_VERSION_MIN 26
-#define PLUGIN_INTERFACE_VERSION_MAX 26
+// v31: Added extra_window_flags to PluginWindowHints.
+//      Allows plugins to pass additional ImGuiWindowFlags (e.g. NoTitleBar, NoResize).
+//      0 = no extra flags (default behaviour unchanged). MIN remains 26.
+// v32: Added IPluginClientSessionInfo (client only, null on server/generic).
+//      Exposes GetSessionOnlineMode, IsMultiplayer, IsServer query functions.
+// v33: Added pluginTarget field to PluginInfo. Every plugin must now declare
+//      PLUGIN_TARGET_CLIENT or PLUGIN_TARGET_SERVER. The loader rejects plugins
+//      that don't match the current build target.
+// v34: Game had an update, needed interface bump
+#define PLUGIN_INTERFACE_VERSION_MIN 34
+#define PLUGIN_INTERFACE_VERSION_MAX 34
 #define PLUGIN_INTERFACE_VERSION PLUGIN_INTERFACE_VERSION_MAX
 
 enum class PluginLogLevel { Trace = 0, Debug = 1, Info = 2, Warn = 3, Error = 4 };
-enum class ConfigValueType { String, Integer, Float, Boolean };
+enum class ConfigValueType { String, Integer, Float, Boolean, Keybind };
+
+// Session online mode — mirrors ECrOnlineSessionMode / ECommonSessionOnlineMode from the game.
+// Offline = solo/standalone, LAN/Online = multiplayer session.
+enum class EPluginSessionOnlineMode : uint8_t
+{
+    Offline = 0,
+    LAN     = 1,
+    Online  = 2,
+    Unknown = 255
+};
 
 struct ConfigEntry
 {
@@ -213,14 +232,43 @@ enum class EModKey : uint32_t
 
 enum class EModKeyEvent : uint32_t { Pressed = 0, Released = 1 };
 
+// Modifier bitmask used with combo keybinds (v28).
+// Each flag covers both Left and Right variants of that modifier key.
+enum EModKeyModifiers : uint32_t
+{
+	EModKeyMod_None  = 0,
+	EModKeyMod_Ctrl  = 1 << 0,
+	EModKeyMod_Shift = 1 << 1,
+	EModKeyMod_Alt   = 1 << 2,
+};
+
 typedef void (*PluginKeybindCallback)(EModKey key, EModKeyEvent event);
+
+// Combo callback — receives the base key, the modifier bitmask held at the
+// moment of the transition, and the event type (v28).
+typedef void (*PluginKeybindComboCallback)(EModKey key, EModKeyModifiers mods, EModKeyEvent event);
 
 struct IPluginInputEvents
 {
+	// v15 — register by enum; fires on key transition regardless of modifier state.
 	void (*RegisterKeybind)(EModKey key, EModKeyEvent event, PluginKeybindCallback callback);
 	void (*UnregisterKeybind)(EModKey key, EModKeyEvent event, PluginKeybindCallback callback);
-	void (*RegisterKeybindByName)(const char* keyName, EModKeyEvent event, PluginKeybindCallback callback);
-	void (*UnregisterKeybindByName)(const char* keyName, EModKeyEvent event, PluginKeybindCallback callback);
+
+	// v15/v30 — register by name string.  Accepts plain key names ("F5") and
+	// combo strings ("Ctrl+C", "Shift+F5", "Ctrl+Shift+Delete").  Modifier tokens
+	// are case-insensitive.  The callback receives the base key and event; the
+	// modifiers are implicit in the name you registered.
+	// The modloader tracks these registrations and automatically re-registers
+	// the keybind when the user rebinds it in the plugin config UI.
+	void (*RegisterKeybindByName)(const char* combo, EModKeyEvent event, PluginKeybindCallback callback);
+	void (*UnregisterKeybindByName)(const char* combo, EModKeyEvent event, PluginKeybindCallback callback);
+
+	// v28 — advanced: register by enum + explicit modifier mask.  Fires only when
+	// the key transitions with exactly those modifiers held.  The callback receives
+	// the modifier mask at fire time.  Use this only when you need the mods passed
+	// back; most plugins should use RegisterKeybindByName instead.
+	void (*RegisterKeybindCombo)(EModKey key, EModKeyModifiers mods, EModKeyEvent event, PluginKeybindComboCallback callback);
+	void (*UnregisterKeybindCombo)(EModKey key, EModKeyModifiers mods, EModKeyEvent event, PluginKeybindComboCallback callback);
 };
 
 // ---------------------------------------------------------------------------
@@ -281,6 +329,16 @@ struct IModLoaderImGui
 
 typedef void (*PluginImGuiRenderCallback)(IModLoaderImGui* imgui);
 
+// Flags for PluginWindowHints::extra_window_flags (v31).
+// Values mirror ImGuiWindowFlags so plugins do not need imgui.h.
+#define PluginWindowFlags_NoTitleBar        (1 << 0)
+#define PluginWindowFlags_NoResize          (1 << 1)
+#define PluginWindowFlags_NoMove            (1 << 2)
+#define PluginWindowFlags_NoScrollbar       (1 << 3)
+#define PluginWindowFlags_NoBackground      (1 << 7)
+#define PluginWindowFlags_NoSavedSettings   (1 << 8)
+#define PluginWindowFlags_NoMouseInputs     (1 << 9)
+
 // Optional size/position hints for RegisterWidget windows.
 // Set width/height to 0 for no size hint. Set pos_x/pos_y to -1 to skip positioning.
 // size_cond / pos_cond: 0 = Always, 1 = FirstUseEver.
@@ -294,6 +352,7 @@ struct PluginWindowHints
 	float pivot_y;
 	int   size_cond;
 	int   pos_cond;
+	int   extra_window_flags;  // v31: OR'd into ImGuiWindowFlags; 0 = default
 };
 
 struct PluginPanelDesc
@@ -500,6 +559,23 @@ struct IPluginHttpServer
 };
 
 // ---------------------------------------------------------------------------
+// Client session info (v32) — client only, null on server/generic
+// ---------------------------------------------------------------------------
+struct IPluginClientSessionInfo
+{
+    // Returns the current online mode read from UCrSessionSubsystem.
+    // Offline = solo/standalone, LAN or Online = connected to a session.
+    // Returns Unknown if the subsystem is not yet available.
+    EPluginSessionOnlineMode (*GetSessionOnlineMode)();
+
+    // Convenience: true if GetSessionOnlineMode() != Offline and != Unknown.
+    bool (*IsMultiplayer)();
+
+    // True when UCrSessionSubsystem::bIsServer is set (i.e. this instance is acting as server).
+    bool (*IsServer)();
+};
+
+// ---------------------------------------------------------------------------
 // Top-level hooks interface (v14+)
 // ---------------------------------------------------------------------------
 struct IPluginHooks
@@ -517,7 +593,20 @@ struct IPluginHooks
 	IPluginNetworkChannel* Network;   // v17 — server+client; null on generic
 	IPluginNativePointers* NativePointers; // v21
 	IPluginHttpServer*     HttpServer;     // v22 — server only, null on client/generic
+	IPluginClientSessionInfo* ClientSession; // v32 — client only, null on server/generic
 };
+
+// ---------------------------------------------------------------------------
+// Plugin build target
+// ---------------------------------------------------------------------------
+enum PluginTarget : int
+{
+    PLUGIN_TARGET_CLIENT = 0,
+    PLUGIN_TARGET_SERVER = 1,
+};
+
+#define PLUGIN_TARGET_CLIENT_ONLY  PLUGIN_TARGET_CLIENT
+#define PLUGIN_TARGET_SERVER_ONLY  PLUGIN_TARGET_SERVER
 
 // ---------------------------------------------------------------------------
 // Plugin metadata and identity
@@ -529,6 +618,7 @@ struct PluginInfo
 	const char* author;
 	const char* description;
 	int interfaceVersion;
+	int pluginTarget;  // PluginTarget value -- required
 };
 
 struct IPluginSelf
