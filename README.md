@@ -35,20 +35,12 @@ MaxPingDistanceM=500.0
 
 ## Building from Source
 
-**Requirements:** Visual Studio 2022 with the C++ workload, or `clang++` with MinGW-w64 for Linux cross-compilation.
+**Requirements:** Visual Studio 2022 with the C++ workload.
 
 ```bash
 git clone --recurse-submodules https://github.com/Nhimself/starrupture_pingmod.git
 ```
 
-**Windows (Visual Studio):**
-
 Open `StarRupture-PingMod.sln` and build the `Client Release | x64` configuration. The output is placed in `bin\x64\Client Release\plugins\PingMod.dll`.
 
-**Linux (cross-compile):**
-
-```bash
-./build.sh
-```
-
-Output: `bin/x64/Client Release/plugins/PingMod.dll`
+Pushing a tag (or a `VERSION` bump on `main`) builds and publishes the release automatically via GitHub Actions.

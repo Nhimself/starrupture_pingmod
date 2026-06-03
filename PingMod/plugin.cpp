@@ -115,7 +115,8 @@ static PluginInfo s_plugin_info = {
     "Nhimself",
     "Raises the ping distance limit beyond the default 100 m. "
     "Can be enabled/disabled and configured via MaxPingDistanceM in the mod config (default: 1000 m, max: 2000 m).",
-    PLUGIN_INTERFACE_VERSION
+    PLUGIN_INTERFACE_VERSION,
+    PLUGIN_TARGET_CLIENT   // v33: PingMod is a client-only plugin
 };
 
 PluginInfo* GetPluginInfo()
